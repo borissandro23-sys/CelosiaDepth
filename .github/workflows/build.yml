@@ -1,0 +1,55 @@
+name: Build CelosiaDepth (rootless)
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-13
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Theos
+        run: |
+          set -e
+          export THEOS="$HOME/theos"
+          if [ ! -d "$THEOS" ]; then
+            git clone --recursive https://github.com/theos/theos.git "$THEOS"
+          fi
+          # iOS 15 headers/sdk best-effort; CI may use bundled Xcode SDK
+          echo "THEOS=$THEOS" >> "$GITHUB_ENV"
+
+      - name: Build package (rootless)
+        run: |
+          set -e
+          export THEOS="$HOME/theos"
+          export THEOS_PACKAGE_SCHEME=rootless
+          # Non-fatal if SDK 15.5 missing — fall back to available SDK
+          make clean || true
+          make package FINALPACKAGE=1 || make package
+
+      - name: Locate deb
+        id: deb
+        run: |
+          set -e
+          DEB=$(ls -1 packages/*.deb 2>/dev/null | head -n1 || true)
+          if [ -z "$DEB" ]; then
+            DEB=$(ls -1 *.deb 2>/dev/null | head -n1 || true)
+          fi
+          if [ -z "$DEB" ]; then
+            echo "No deb produced"
+            ls -laR .
+            exit 1
+          fi
+          echo "path=$DEB" >> "$GITHUB_OUTPUT"
+          echo "Found $DEB"
+
+      - name: Upload deb artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: CelosiaDepth-deb
+          path: ${{ steps.deb.outputs.path }}
