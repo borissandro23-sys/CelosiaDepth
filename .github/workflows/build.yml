@@ -30,6 +30,12 @@ jobs:
           cp -R "$HOME/theos-sdks/iPhoneOS15.6.sdk" "$THEOS/sdks/"
 
           echo "THEOS=$THEOS" >> "$GITHUB_ENV"
+          
+      - name: Install ldid
+        run: |
+          brew install ldid
+          command -v ldid
+
 
 
       - name: Build package (rootless)
