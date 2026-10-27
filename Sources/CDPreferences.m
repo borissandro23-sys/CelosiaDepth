@@ -1,4 +1,3 @@
-```objc
 #import "CDPreferences.h"
 
 static NSString * const kPrefsPath =
@@ -94,4 +93,3 @@ static void CDPreferencesDidChange(
 }
 
 @end
-```
