@@ -13,15 +13,24 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install Theos
+
+      - name: Install Theos and iOS SDK
         run: |
           set -e
           export THEOS="$HOME/theos"
-          if [ ! -d "$THEOS" ]; then
-            git clone --recursive https://github.com/theos/theos.git "$THEOS"
-          fi
-          # iOS 15 headers/sdk best-effort; CI may use bundled Xcode SDK
+
+          git clone --recursive https://github.com/theos/theos.git "$THEOS"
+
+          git clone --depth 1 --filter=blob:none --sparse \
+            https://github.com/theos/sdks.git "$HOME/theos-sdks"
+
+          git -C "$HOME/theos-sdks" sparse-checkout set iPhoneOS15.6.sdk
+
+          mkdir -p "$THEOS/sdks"
+          cp -R "$HOME/theos-sdks/iPhoneOS15.6.sdk" "$THEOS/sdks/"
+
           echo "THEOS=$THEOS" >> "$GITHUB_ENV"
+
 
       - name: Build package (rootless)
         run: |
