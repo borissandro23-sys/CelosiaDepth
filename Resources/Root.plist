@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>items</key>
+	<array>
+		<dict>
+			<key>cell</key>
+			<string>PSSwitchCell</string>
+			<key>default</key>
+			<true/>
+			<key>defaults</key>
+			<string>com.celosiadepth.tweak</string>
+			<key>key</key>
+			<string>Enabled</string>
+			<key>label</key>
+			<string>Enable CelosiaDepth</string>
+			<key>PostNotification</key>
+			<string>com.celosiadepth.tweak/ReloadPrefs</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSSliderCell</string>
+			<key>default</key>
+			<real>1</real>
+			<key>defaults</key>
+			<string>com.celosiadepth.tweak</string>
+			<key>key</key>
+			<string>Intensity</string>
+			<key>min</key>
+			<real>0</real>
+			<key>max</key>
+			<real>1</real>
+			<key>showValue</key>
+			<true/>
+			<key>label</key>
+			<string>Intensity</string>
+			<key>PostNotification</key>
+			<string>com.celosiadepth.tweak/ReloadPrefs</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSSwitchCell</string>
+			<key>default</key>
+			<true/>
+			<key>defaults</key>
+			<string>com.celosiadepth.tweak</string>
+			<key>key</key>
+			<string>PreferBundledMasks</string>
+			<key>label</key>
+			<string>Prefer bundled masks</string>
+			<key>PostNotification</key>
+			<string>com.celosiadepth.tweak/ReloadPrefs</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSSwitchCell</string>
+			<key>default</key>
+			<false/>
+			<key>defaults</key>
+			<string>com.celosiadepth.tweak</string>
+			<key>key</key>
+			<string>DebugLogging</string>
+			<key>label</key>
+			<string>Debug logging</string>
+			<key>PostNotification</key>
+			<string>com.celosiadepth.tweak/ReloadPrefs</string>
+		</dict>
+	</array>
+	<key>title</key>
+	<string>CelosiaDepth</string>
+</dict>
+</plist>

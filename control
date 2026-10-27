@@ -1,0 +1,13 @@
+Package: com.celosiadepth.tweak
+Name: CelosiaDepth
+Version: 0.1.0
+Architecture: iphoneos-arm64
+Description: Lock-screen depth effect for Celosia-style wallpapers on iOS 15 (rootless / Dopamine).
+Maintainer: CelosiaDepth Contributors
+Author: CelosiaDepth Contributors
+Section: Tweaks
+Depends: mobilesubstrate (>= 0.9.5000), firmware (>= 15.0), firmware (<< 16.0)
+Conflicts: 
+Replaces: 
+Priority: optional
+Homepage: https://github.com/celosiadepth/CelosiaDepth
