@@ -1,4 +1,4 @@
-TARGET := iphone:clang:15.5:15.0
+TARGET := iphone:clang:15.6:15.0
 ARCHS := arm64
 INSTALL_TARGET_PROCESSES := SpringBoard
 
