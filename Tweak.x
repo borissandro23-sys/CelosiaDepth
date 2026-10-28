@@ -30,7 +30,27 @@ static void CDLog(NSString *fmt, ...) {
     va_start(args, fmt);
     NSString *s = [[NSString alloc] initWithFormat:fmt arguments:args];
     va_end(args);
+
+    NSString *line = [NSString stringWithFormat:@"%@ [CelosiaDepth] %@\\n", [NSDate date], s];
     NSLog(@"[CelosiaDepth] %@", s);
+
+    // Keep a small, user-readable diagnostic trail because the iOS unified-log
+    // command may not be available in rootless jailbreak shells.
+    NSString *path = @"/var/mobile/Library/Logs/CelosiaDepth.log";
+    NSFileManager *fm = [NSFileManager defaultManager];
+    if (![fm fileExistsAtPath:path]) {
+        [fm createFileAtPath:path contents:nil attributes:@{NSFilePosixPermissions: @0600}];
+    }
+    NSFileHandle *handle = [NSFileHandle fileHandleForWritingAtPath:path];
+    if (handle) {
+        @try {
+            [handle seekToEndOfFile];
+            [handle writeData:[line dataUsingEncoding:NSUTF8StringEncoding]];
+            [handle closeFile];
+        } @catch (__unused NSException *exception) {
+            @try { [handle closeFile]; } @catch (__unused NSException *ignored) {}
+        }
+    }
 }
 
 static UIView *CDFindClockHostInView(UIView *root) {
@@ -105,6 +125,9 @@ static void CDRefreshDepthEffect(void) {
         CDRemoveOverlay();
         return;
     }
+
+    CDLog(@"wallpaper loaded source=%@ size=%.0fx%.0f", info.identityKey,
+          info.image.size.width, info.image.size.height);
 
     UIView *clockHost = CDLikelyLockContentView();
     if (!clockHost) {
