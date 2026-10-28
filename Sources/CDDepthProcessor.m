@@ -10,7 +10,7 @@ static void CDPLog(NSString *fmt, ...) {
     NSString *message = [[NSString alloc] initWithFormat:fmt arguments:args];
     va_end(args);
 
-    CDPLog(@"%@", message);
+    NSLog(@"[CelosiaDepth] %@", message);
     NSString *line = [NSString stringWithFormat:@"%@ [CelosiaDepth] %@\n", [NSDate date], message];
     NSString *path = @"/var/mobile/Library/Logs/CelosiaDepth.log";
     NSFileManager *fm = [NSFileManager defaultManager];
