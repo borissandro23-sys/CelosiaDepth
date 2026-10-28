@@ -160,8 +160,18 @@
     CGSize s = image.size;
     if (s.width <= 0 || s.height <= 0) return nil;
 
-    // Without shipped reference hashes we cannot claim a match.
-    // Return nil so processor falls back to soft luminance foreground (conservative).
+    // Explicit opt-in: if the user manually installs this exact mask file, use it
+    // for the iOS 27 Light wallpaper. Presence of the file is the opt-in signal;
+    // it is NOT image recognition, so remove/rename the file for other wallpapers.
+    NSString *maskPath = [@"/var/jb/Library/Application Support/CelosiaDepth/Masks"
+        stringByAppendingPathComponent:@"ios27_light.png"];
+    if ([[NSFileManager defaultManager] fileExistsAtPath:maskPath]) {
+        if ([CDPreferences shared].debugLogging) {
+            NSLog(@"[CelosiaDepth] manual mask selected: ios27_light (file exists; no perceptual match performed)");
+        }
+        return @"ios27_light";
+    }
+
     (void)s;
     return nil;
 }

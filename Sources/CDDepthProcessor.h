@@ -8,9 +8,10 @@ NS_ASSUME_NONNULL_BEGIN
 
 + (instancetype)shared;
 
-/// Builds a foreground UIImage (transparent background) suitable for overlay above clock.
-/// Uses bundled mask when matched; otherwise a lightweight luminance/edge heuristic.
-/// Returns nil when result would be unreliable (avoids covering clock with noise).
+/// Builds a transparent foreground image for the overlay above the lock-screen clock.
+/// A manually authored mask is preferred. The fallback is only an experimental edge map,
+/// not semantic segmentation and not a guarantee of a native-style depth effect.
+/// Returns nil when the result would be unreliable.
 - (nullable UIImage *)foregroundImageForWallpaper:(CDWallpaperInfo *)info
                                        targetSize:(CGSize)targetSize;
 

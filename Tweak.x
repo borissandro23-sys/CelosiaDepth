@@ -79,14 +79,13 @@ static void CDEnsureOverlayAboveClock(UIView *clockRelated) {
     }
     if (CDOverlay.superview != parent) {
         [CDOverlay removeFromSuperview];
-        // Insert just above wallpaper layers but try to keep above date if possible.
-        // Strategy: add above the clock-related view so subject draws over time.
-        NSUInteger idx = [parent.subviews indexOfObject:clockRelated];
-        if (idx != NSNotFound) {
-            [parent insertSubview:CDOverlay aboveSubview:clockRelated];
-        } else {
-            [parent addSubview:CDOverlay];
-        }
+        [parent addSubview:CDOverlay];
+    }
+    // Reposition even when the parent is unchanged: SpringBoard may rebuild/reorder
+    // subviews after lock-screen transitions.
+    NSUInteger idx = [parent.subviews indexOfObject:clockRelated];
+    if (idx != NSNotFound) {
+        [parent insertSubview:CDOverlay aboveSubview:clockRelated];
     }
     CDOverlay.frame = parent.bounds;
 }
@@ -113,6 +112,23 @@ static void CDRefreshDepthEffect(void) {
     }
 
     CDEnsureOverlayAboveClock(clockHost);
+
+    UIView *overlayParent = CDOverlay.superview;
+    CDLog(@"clockHost=%@ frame=%@ parent=%@ parentSubviews=%lu",
+          NSStringFromClass(clockHost.class),
+          NSStringFromCGRect(clockHost.frame),
+          NSStringFromClass(clockHost.superview.class),
+          (unsigned long)clockHost.superview.subviews.count);
+    CDLog(@"overlay parent=%@ frame=%@ hidden=%d alpha=%.2f",
+          NSStringFromClass(overlayParent.class),
+          NSStringFromCGRect(CDOverlay.frame),
+          CDOverlay.hidden, CDOverlay.alpha);
+    if (overlayParent && clockHost.superview == overlayParent) {
+        NSUInteger clockIndex = [overlayParent.subviews indexOfObject:clockHost];
+        NSUInteger overlayIndex = [overlayParent.subviews indexOfObject:CDOverlay];
+        CDLog(@"layer order clockIndex=%lu overlayIndex=%lu (overlay should be above clock)",
+              (unsigned long)clockIndex, (unsigned long)overlayIndex);
+    }
 
     CGSize target = clockHost.superview ? clockHost.superview.bounds.size : UIScreen.mainScreen.bounds.size;
     // Cap processing size for A9
