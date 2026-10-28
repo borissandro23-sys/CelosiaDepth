@@ -6,8 +6,8 @@ Description: Lock-screen depth effect for Celosia-style wallpapers on iOS 15 (ro
 Maintainer: CelosiaDepth Contributors
 Author: CelosiaDepth Contributors
 Section: Tweaks
-Depends: mobilesubstrate (>= 0.9.5000), firmware (>= 15.0), firmware (<< 16.0)
+Depends: mobilesubstrate (>= 0.9.5000), preferenceloader, firmware (>= 15.0), firmware (<< 16.0)
 Conflicts: 
 Replaces: 
 Priority: optional
-Homepage: https://github.com/celosiadepth/CelosiaDepth
+Homepage: https://github.com/borissandro23-sys/CelosiaDepth
