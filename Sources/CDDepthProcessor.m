@@ -2,6 +2,34 @@
 #import "CDCacheManager.h"
 #import "CDPreferences.h"
 
+static void CDPLog(NSString *fmt, ...) NS_FORMAT_FUNCTION(1,2);
+static void CDPLog(NSString *fmt, ...) {
+    if (![CDPreferences shared].debugLogging) return;
+    va_list args;
+    va_start(args, fmt);
+    NSString *message = [[NSString alloc] initWithFormat:fmt arguments:args];
+    va_end(args);
+
+    NSLog(@"[CelosiaDepth] %@", message);
+    NSString *line = [NSString stringWithFormat:@"%@ [CelosiaDepth] %@\n", [NSDate date], message];
+    NSString *path = @"/var/mobile/Library/Logs/CelosiaDepth.log";
+    NSFileManager *fm = [NSFileManager defaultManager];
+    if (![fm fileExistsAtPath:path]) {
+        [fm createFileAtPath:path contents:nil attributes:@{NSFilePosixPermissions: @0600}];
+    }
+    NSFileHandle *handle = [NSFileHandle fileHandleForWritingAtPath:path];
+    if (handle) {
+        @try {
+            [handle seekToEndOfFile];
+            [handle writeData:[line dataUsingEncoding:NSUTF8StringEncoding]];
+            [handle closeFile];
+        } @catch (__unused NSException *exception) {
+            @try { [handle closeFile]; } @catch (__unused NSException *ignored) {}
+        }
+    }
+}
+
+
 @implementation CDDepthProcessor
 
 + (instancetype)shared {
@@ -51,12 +79,14 @@
     return result;
 }
 
-/// Conservative soft-matte: keep brighter / higher-contrast upper-mid regions only if
-/// enough opaque pixels exist. Abstract wallpapers often fail the coverage test → nil.
+/// Conservative soft-matte based on local contrast. This is a heuristic, not semantic segmentation.
 - (UIImage *)heuristicForegroundFromImage:(UIImage *)image size:(CGSize)size {
     UIImage *scaled = [self scaleImage:image toSize:size];
     CGImageRef cg = scaled.CGImage;
-    if (!cg) return nil;
+    if (!cg) {
+        if ([CDPreferences shared].debugLogging) CDPLog(@"heuristic: scaled image has no CGImage");
+        return nil;
+    }
 
     size_t w = CGImageGetWidth(cg);
     size_t h = CGImageGetHeight(cg);
@@ -74,8 +104,6 @@
     if (!ctx) { free(buf); return nil; }
     CGContextDrawImage(ctx, CGRectMake(0, 0, w, h), cg);
 
-    // Build alpha from local contrast; bias toward lower third (typical subject placement
-    // for depth-capable wallpapers). Abstract patterns stay noisy → reject by coverage.
     size_t opaque = 0;
     size_t total = w * h;
     for (size_t y = 0; y < h; y++) {
@@ -83,12 +111,12 @@
             size_t i = y * bytesPerRow + x * 4;
             uint8_t r = buf[i], g = buf[i+1], b = buf[i+2];
             float lum = (0.299f * r + 0.587f * g + 0.114f * b) / 255.f;
-            // neighbor contrast
             size_t x2 = x + 1 < w ? x + 1 : x;
             size_t i2 = y * bytesPerRow + x2 * 4;
             float lum2 = (0.299f * buf[i2] + 0.587f * buf[i2+1] + 0.114f * buf[i2+2]) / 255.f;
             float edge = fabsf(lum - lum2);
-            float score = edge * 1.4f + (y > h * 0.35f ? 0.15f : 0.0f);
+            // A small lower-third bias may help depth placement, but must not make the entire lower area opaque.
+            float score = edge * 1.4f + (y > h * 0.35f ? 0.03f : 0.0f);
             uint8_t a = score > 0.12f ? (uint8_t)MIN(255, (int)(score * 255.f * 2.f)) : 0;
             if (a < 40) a = 0;
             buf[i+3] = a;
@@ -96,13 +124,18 @@
         }
     }
 
-    float coverage = (float)opaque / (float)total;
-    // Too little or too much → unreliable abstract wallpaper
+    float coverage = total ? (float)opaque / (float)total : 0.0f;
+    if ([CDPreferences shared].debugLogging) {
+        CDPLog(@"heuristic diagnostic: image=%zux%zu target=%.0fx%.0f opaque=%zu total=%zu coverage=%.4f",
+              w, h, size.width, size.height, opaque, total, coverage);
+    }
+
+    // Keep the existing conservative thresholds until real-device measurements are available.
     if (coverage < 0.02f || coverage > 0.45f) {
         CGContextRelease(ctx);
         free(buf);
         if ([CDPreferences shared].debugLogging) {
-            NSLog(@"[CelosiaDepth] heuristic rejected coverage=%.3f", coverage);
+            CDPLog(@"heuristic rejected coverage=%.4f (accepted range 0.0200..0.4500)", coverage);
         }
         return nil;
     }
@@ -121,7 +154,10 @@
 
     NSString *cacheKey = [NSString stringWithFormat:@"%@|%.0fx%.0f", info.identityKey, targetSize.width, targetSize.height];
     UIImage *cached = [[CDCacheManager shared] cachedForegroundForKey:cacheKey];
-    if (cached) return cached;
+    if (cached) {
+        if ([CDPreferences shared].debugLogging) CDPLog(@"foreground cache hit key=%@", cacheKey);
+        return cached;
+    }
 
     UIImage *result = nil;
     CDPreferences *prefs = [CDPreferences shared];
@@ -130,7 +166,12 @@
         UIImage *mask = [self loadBundledMaskNamed:info.matchedMaskName];
         if (mask) {
             result = [self applyMask:mask toImage:info.image size:targetSize];
+            if (prefs.debugLogging) CDPLog(@"bundled mask %@ %@", info.matchedMaskName, result ? @"applied" : @"failed");
+        } else if (prefs.debugLogging) {
+            CDPLog(@"bundled mask %@ not found/readable", info.matchedMaskName);
         }
+    } else if (prefs.debugLogging) {
+        CDPLog(@"no matched bundled mask; using heuristic");
     }
 
     if (!result) {

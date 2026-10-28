@@ -109,13 +109,24 @@
     UIImage *img = nil;
     NSString *key = nil;
 
-    if ([[NSFileManager defaultManager] fileExistsAtPath:cp]) {
-        img = [self imageFromCPBitmapAtPath:cp];
-        key = [self fileFingerprint:cp];
-    }
-    if (!img && [[NSFileManager defaultManager] fileExistsAtPath:thumb]) {
+    // Prefer the standard JPEG thumbnail: UIKit can decode it reliably, while
+    // cpbitmap is a private format whose layout changes across iOS versions.
+    if ([[NSFileManager defaultManager] fileExistsAtPath:thumb]) {
         img = [self imageFromJPEGAtPath:thumb];
-        key = [self fileFingerprint:thumb];
+        if (img) {
+            key = [self fileFingerprint:thumb];
+        } else if ([CDPreferences shared].debugLogging) {
+            NSLog(@"[CelosiaDepth] JPEG thumbnail exists but UIImage could not decode it");
+        }
+    }
+    // Only try the best-effort cpbitmap parser if the JPEG thumbnail failed.
+    if (!img && [[NSFileManager defaultManager] fileExistsAtPath:cp]) {
+        img = [self imageFromCPBitmapAtPath:cp];
+        if (img) {
+            key = [self fileFingerprint:cp];
+        } else if ([CDPreferences shared].debugLogging) {
+            NSLog(@"[CelosiaDepth] cpbitmap exists but decoder returned nil");
+        }
     }
 
     // Optional: try private SBWallpaperController if class exists (device verification required)
@@ -140,13 +151,14 @@
 }
 
 - (NSString *)currentWallpaperFingerprint {
-    NSString *cp = @"/var/mobile/Library/SpringBoard/LockBackground.cpbitmap";
-    if ([[NSFileManager defaultManager] fileExistsAtPath:cp]) {
-        return [self fileFingerprint:cp];
-    }
+    // Keep fingerprint source consistent with currentLockScreenWallpaper.
     NSString *thumb = @"/var/mobile/Library/SpringBoard/LockBackgroundThumbnail.jpg";
     if ([[NSFileManager defaultManager] fileExistsAtPath:thumb]) {
         return [self fileFingerprint:thumb];
+    }
+    NSString *cp = @"/var/mobile/Library/SpringBoard/LockBackground.cpbitmap";
+    if ([[NSFileManager defaultManager] fileExistsAtPath:cp]) {
+        return [self fileFingerprint:cp];
     }
     return nil;
 }
