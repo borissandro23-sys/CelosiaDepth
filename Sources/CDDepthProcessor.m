@@ -12,10 +12,8 @@
 }
 
 - (NSString *)bundleMasksPath {
-    // Prefer rootless tweak resources path when installed via Theos layout
     NSString *path = @"/var/jb/Library/Application Support/CelosiaDepth/Masks";
     if ([[NSFileManager defaultManager] fileExistsAtPath:path]) return path;
-    // Fallback relative to dylib bundle
     NSString *bundle = [[NSBundle mainBundle] bundlePath];
     return [bundle stringByAppendingPathComponent:@"Masks"];
 }
@@ -41,9 +39,7 @@
     CGRect r = CGRectMake(0, 0, size.width, size.height);
     UIGraphicsBeginImageContextWithOptions(size, NO, 1.0);
     CGContextRef ctx = UIGraphicsGetCurrentContext();
-    // Draw wallpaper
     [img drawInRect:r];
-    // Keep only mask luminance as alpha
     CGContextSetBlendMode(ctx, kCGBlendModeDestinationIn);
     [m drawInRect:r];
     UIImage *result = UIGraphicsGetImageFromCurrentImageContext();
@@ -51,8 +47,8 @@
     return result;
 }
 
-/// Conservative soft-matte: keep brighter / higher-contrast upper-mid regions only if
-/// enough opaque pixels exist. Abstract wallpapers often fail the coverage test → nil.
+/// Strict edge-based soft-matte. No regional bias that forces lower screen opaque.
+/// Abstract gradient wallpapers (Celosia / iOS 27 Light style) usually reject — use bundled masks.
 - (UIImage *)heuristicForegroundFromImage:(UIImage *)image size:(CGSize)size {
     UIImage *scaled = [self scaleImage:image toSize:size];
     CGImageRef cg = scaled.CGImage;
@@ -60,7 +56,7 @@
 
     size_t w = CGImageGetWidth(cg);
     size_t h = CGImageGetHeight(cg);
-    if (w == 0 || h == 0) return nil;
+    if (w < 8 || h < 8) return nil;
 
     size_t bytesPerRow = w * 4;
     size_t bufSize = bytesPerRow * h;
@@ -74,35 +70,62 @@
     if (!ctx) { free(buf); return nil; }
     CGContextDrawImage(ctx, CGRectMake(0, 0, w, h), cg);
 
-    // Build alpha from local contrast; bias toward lower third (typical subject placement
-    // for depth-capable wallpapers). Abstract patterns stay noisy → reject by coverage.
-    size_t opaque = 0;
-    size_t total = w * h;
+    float *lum = (float *)malloc(sizeof(float) * w * h);
+    if (!lum) { CGContextRelease(ctx); free(buf); return nil; }
     for (size_t y = 0; y < h; y++) {
         for (size_t x = 0; x < w; x++) {
             size_t i = y * bytesPerRow + x * 4;
-            uint8_t r = buf[i], g = buf[i+1], b = buf[i+2];
-            float lum = (0.299f * r + 0.587f * g + 0.114f * b) / 255.f;
-            // neighbor contrast
-            size_t x2 = x + 1 < w ? x + 1 : x;
-            size_t i2 = y * bytesPerRow + x2 * 4;
-            float lum2 = (0.299f * buf[i2] + 0.587f * buf[i2+1] + 0.114f * buf[i2+2]) / 255.f;
-            float edge = fabsf(lum - lum2);
-            float score = edge * 1.4f + (y > h * 0.35f ? 0.15f : 0.0f);
-            uint8_t a = score > 0.12f ? (uint8_t)MIN(255, (int)(score * 255.f * 2.f)) : 0;
-            if (a < 40) a = 0;
-            buf[i+3] = a;
-            if (a > 0) opaque++;
+            lum[y * w + x] = (0.299f * buf[i] + 0.587f * buf[i + 1] + 0.114f * buf[i + 2]) / 255.f;
         }
     }
 
-    float coverage = (float)opaque / (float)total;
-    // Too little or too much → unreliable abstract wallpaper
-    if (coverage < 0.02f || coverage > 0.45f) {
+    size_t opaque = 0;
+    float edgeSum = 0.f;
+    size_t edgeSamples = 0;
+    for (size_t y = 1; y + 1 < h; y++) {
+        for (size_t x = 1; x + 1 < w; x++) {
+            float tl = lum[(y - 1) * w + (x - 1)];
+            float tc = lum[(y - 1) * w + x];
+            float tr = lum[(y - 1) * w + (x + 1)];
+            float ml = lum[y * w + (x - 1)];
+            float mr = lum[y * w + (x + 1)];
+            float bl = lum[(y + 1) * w + (x - 1)];
+            float bc = lum[(y + 1) * w + x];
+            float br = lum[(y + 1) * w + (x + 1)];
+            float gx = -tl + tr - 2.f * ml + 2.f * mr - bl + br;
+            float gy = -tl - 2.f * tc - tr + bl + 2.f * bc + br;
+            float mag = sqrtf(gx * gx + gy * gy);
+            edgeSum += mag;
+            edgeSamples++;
+
+            uint8_t a = 0;
+            if (mag > 0.55f) {
+                a = (uint8_t)MIN(255, (int)((mag - 0.55f) * 400.f));
+                if (a < 48) a = 0;
+            }
+            size_t i = y * bytesPerRow + x * 4;
+            buf[i + 3] = a;
+            if (a > 0) opaque++;
+        }
+    }
+    free(lum);
+
+    float coverage = (float)opaque / (float)(w * h);
+    float meanEdge = edgeSamples ? (edgeSum / (float)edgeSamples) : 0.f;
+
+    if ([CDPreferences shared].debugLogging) {
+        NSLog(@"[CelosiaDepth] heuristic v2: %zux%zu opaque=%zu coverage=%.4f meanEdge=%.4f",
+              w, h, opaque, coverage, meanEdge);
+    }
+
+    // Abstract gradients: weak structure or near-full soft edges — reject (no fake matte)
+    BOOL reject = (coverage < 0.008f || coverage > 0.22f || meanEdge < 0.08f);
+    if (reject) {
         CGContextRelease(ctx);
         free(buf);
         if ([CDPreferences shared].debugLogging) {
-            NSLog(@"[CelosiaDepth] heuristic rejected coverage=%.3f", coverage);
+            NSLog(@"[CelosiaDepth] heuristic rejected (not depth-capable). "
+                  "Abstract Celosia-style wallpapers need a bundled mask PNG.");
         }
         return nil;
     }
@@ -121,24 +144,40 @@
 
     NSString *cacheKey = [NSString stringWithFormat:@"%@|%.0fx%.0f", info.identityKey, targetSize.width, targetSize.height];
     UIImage *cached = [[CDCacheManager shared] cachedForegroundForKey:cacheKey];
-    if (cached) return cached;
+    if (cached) {
+        if ([CDPreferences shared].debugLogging) {
+            NSLog(@"[CelosiaDepth] foreground cache hit key=%@", cacheKey);
+        }
+        return cached;
+    }
 
     UIImage *result = nil;
+    NSString *via = nil;
     CDPreferences *prefs = [CDPreferences shared];
 
     if (prefs.preferBundledMasks && info.matchedMaskName.length) {
         UIImage *mask = [self loadBundledMaskNamed:info.matchedMaskName];
         if (mask) {
             result = [self applyMask:mask toImage:info.image size:targetSize];
+            via = info.matchedMaskName;
+        } else if (prefs.debugLogging) {
+            NSLog(@"[CelosiaDepth] mask file missing for name=%@", info.matchedMaskName);
         }
     }
 
     if (!result) {
         result = [self heuristicForegroundFromImage:info.image size:targetSize];
+        if (result) via = @"heuristic";
     }
 
     if (result) {
         [[CDCacheManager shared] storeForeground:result forKey:cacheKey];
+        if (prefs.debugLogging) {
+            NSLog(@"[CelosiaDepth] foreground ready size=%.0fx%.0f via=%@",
+                  result.size.width, result.size.height, via ?: @"?");
+        }
+    } else if (prefs.debugLogging) {
+        NSLog(@"[CelosiaDepth] no foreground (matchedMask=%@)", info.matchedMaskName ?: @"(none)");
     }
     return result;
 }

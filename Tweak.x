@@ -2,8 +2,8 @@
  CelosiaDepth — lock-screen depth overlay for iOS 15 (rootless / Dopamine)
 
  Private class names used below are the common iOS 14/15 SpringBoard surfaces.
- They MUST be verified with FLEX / class-dump / Cycript on the target 15.8.x build
- before relying on production behavior. Hooks fail soft when classes are missing.
+ They MUST be verified with FLEX / class-dump on the target 15.8.x build.
+ Hooks fail soft when classes are missing.
 */
 
 #import <UIKit/UIKit.h>
@@ -14,7 +14,6 @@
 #import "Sources/CDDepthOverlayView.h"
 #import "Sources/CDCacheManager.h"
 
-// Forward-declare private types we only message via runtime when present.
 @interface SBLockScreenManager : NSObject
 + (instancetype)sharedInstance;
 @end
@@ -35,7 +34,6 @@ static void CDLog(NSString *fmt, ...) {
 
 static UIView *CDFindClockHostInView(UIView *root) {
     if (!root) return nil;
-    // iOS 15 SBFLockScreenDateView is the usual time/date container.
     NSString *clsName = NSStringFromClass(root.class);
     if ([clsName containsString:@"LockScreenDate"] || [clsName containsString:@"SBFLockScreenDateView"]) {
         return root.superview ?: root;
@@ -48,7 +46,6 @@ static UIView *CDFindClockHostInView(UIView *root) {
 }
 
 static UIView *CDLikelyLockContentView(void) {
-    // Walk key windows hosted by SpringBoard for lock UI.
     for (UIWindow *window in UIApplication.sharedApplication.windows) {
         UIView *found = CDFindClockHostInView(window);
         if (found) return found;
@@ -69,9 +66,8 @@ static void CDEnsureOverlayAboveClock(UIView *clockRelated) {
     if (!CDOverlay) {
         CDOverlay = [[CDDepthOverlayView alloc] initWithFrame:parent.bounds];
         CDOverlay.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
-        CDOverlay.tag = 0xCE10CA; // detect duplicates
+        CDOverlay.tag = 0xCE10CA;
     }
-    // Remove any stale duplicates
     for (UIView *v in parent.subviews) {
         if (v != CDOverlay && v.tag == 0xCE10CA) {
             [v removeFromSuperview];
@@ -79,8 +75,6 @@ static void CDEnsureOverlayAboveClock(UIView *clockRelated) {
     }
     if (CDOverlay.superview != parent) {
         [CDOverlay removeFromSuperview];
-        // Insert just above wallpaper layers but try to keep above date if possible.
-        // Strategy: add above the clock-related view so subject draws over time.
         NSUInteger idx = [parent.subviews indexOfObject:clockRelated];
         if (idx != NSNotFound) {
             [parent insertSubview:CDOverlay aboveSubview:clockRelated];
@@ -94,6 +88,7 @@ static void CDEnsureOverlayAboveClock(UIView *clockRelated) {
 static void CDRefreshDepthEffect(void) {
     CDRefreshScheduled = NO;
     if (![CDPreferences shared].isEnabled) {
+        CDLog(@"disabled; removing overlay");
         CDRemoveOverlay();
         return;
     }
@@ -105,17 +100,28 @@ static void CDRefreshDepthEffect(void) {
         CDRemoveOverlay();
         return;
     }
+    CDLog(@"wallpaper loaded source=%@ size=%.0fx%.0f maskHint=%@",
+          info.identityKey,
+          info.image.size.width, info.image.size.height,
+          info.matchedMaskName ?: @"(none)");
 
     UIView *clockHost = CDLikelyLockContentView();
     if (!clockHost) {
         CDLog(@"clock host not found yet");
         return;
     }
+    CDLog(@"clockHost=%@ frame=%@ parent=%@",
+          NSStringFromClass(clockHost.class),
+          NSStringFromCGRect(clockHost.frame),
+          clockHost.superview ? NSStringFromClass(clockHost.superview.class) : @"(nil)");
 
     CDEnsureOverlayAboveClock(clockHost);
+    CDLog(@"overlay superview=%@ frame=%@ hidden=%d alpha=%.2f",
+          CDOverlay.superview ? NSStringFromClass(CDOverlay.superview.class) : @"(nil)",
+          NSStringFromCGRect(CDOverlay.frame),
+          CDOverlay.hidden, CDOverlay.alpha);
 
     CGSize target = clockHost.superview ? clockHost.superview.bounds.size : UIScreen.mainScreen.bounds.size;
-    // Cap processing size for A9
     CGFloat maxSide = 750.0;
     if (target.width > maxSide || target.height > maxSide) {
         CGFloat scale = maxSide / MAX(target.width, target.height);
@@ -131,7 +137,8 @@ static void CDRefreshDepthEffect(void) {
 
     [CDOverlay setForegroundImage:fg intensity:[CDPreferences shared].intensity];
     CDLastFingerprint = fp;
-    CDLog(@"overlay updated key=%@", info.identityKey);
+    CDLog(@"overlay updated key=%@ fgSize=%.0fx%.0f intensity=%.2f",
+          info.identityKey, fg.size.width, fg.size.height, [CDPreferences shared].intensity);
 }
 
 static void CDScheduleRefresh(void) {
@@ -149,52 +156,37 @@ static void CDScheduleRefresh(void) {
     }
 }
 
-// --- Hooks (soft) ----------------------------------------------------------
-
 %hook SBLockScreenManager
-
 - (void)lockUIFromSource:(int)source withOptions:(id)options {
     %orig;
     CDScheduleRefresh();
 }
-
 - (void)unlockUIFromSource:(int)source withOptions:(id)options {
     %orig;
-    // Keep overlay state; avoid thrashing. Optional clear:
-    // CDRemoveOverlay();
 }
-
 %end
 
-// CoverSheet on iOS 15 still routes many LS presentations through these.
 %hook CSCoverSheetViewController
-
 - (void)viewDidAppear:(BOOL)animated {
     %orig;
     CDScheduleRefresh();
 }
-
 - (void)viewWillDisappear:(BOOL)animated {
     %orig;
 }
-
 %end
 
-// Wallpaper changes
 %hook SBWallpaperController
-
 - (void)setWallpaperImage:(id)image forVariant:(long long)variant {
     %orig;
-    if (variant == 0 || variant == 1) { // lock / home — treat as possible LS change
+    if (variant == 0 || variant == 1) {
         [[CDCacheManager shared] invalidateAll];
         CDLastFingerprint = nil;
         CDScheduleRefresh();
     }
 }
-
 %end
 
-// Fallback: SpringBoard significant time / unlock notifications via Darwin
 static void CDRegisterNotifications(void) {
     NSNotificationCenter *nc = [NSNotificationCenter defaultCenter];
     [nc addObserverForName:UIApplicationDidBecomeActiveNotification
