@@ -115,7 +115,8 @@ static void CDPLog(NSString *fmt, ...) {
             size_t i2 = y * bytesPerRow + x2 * 4;
             float lum2 = (0.299f * buf[i2] + 0.587f * buf[i2+1] + 0.114f * buf[i2+2]) / 255.f;
             float edge = fabsf(lum - lum2);
-            float score = edge * 1.4f + (y > h * 0.35f ? 0.15f : 0.0f);
+            // A small lower-third bias may help depth placement, but must not make the entire lower area opaque.
+            float score = edge * 1.4f + (y > h * 0.35f ? 0.03f : 0.0f);
             uint8_t a = score > 0.12f ? (uint8_t)MIN(255, (int)(score * 255.f * 2.f)) : 0;
             if (a < 40) a = 0;
             buf[i+3] = a;
