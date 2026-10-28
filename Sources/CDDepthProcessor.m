@@ -2,6 +2,34 @@
 #import "CDCacheManager.h"
 #import "CDPreferences.h"
 
+static void CDPLog(NSString *fmt, ...) NS_FORMAT_FUNCTION(1,2);
+static void CDPLog(NSString *fmt, ...) {
+    if (![CDPreferences shared].debugLogging) return;
+    va_list args;
+    va_start(args, fmt);
+    NSString *message = [[NSString alloc] initWithFormat:fmt arguments:args];
+    va_end(args);
+
+    CDPLog(@"%@", message);
+    NSString *line = [NSString stringWithFormat:@"%@ [CelosiaDepth] %@\n", [NSDate date], message];
+    NSString *path = @"/var/mobile/Library/Logs/CelosiaDepth.log";
+    NSFileManager *fm = [NSFileManager defaultManager];
+    if (![fm fileExistsAtPath:path]) {
+        [fm createFileAtPath:path contents:nil attributes:@{NSFilePosixPermissions: @0600}];
+    }
+    NSFileHandle *handle = [NSFileHandle fileHandleForWritingAtPath:path];
+    if (handle) {
+        @try {
+            [handle seekToEndOfFile];
+            [handle writeData:[line dataUsingEncoding:NSUTF8StringEncoding]];
+            [handle closeFile];
+        } @catch (__unused NSException *exception) {
+            @try { [handle closeFile]; } @catch (__unused NSException *ignored) {}
+        }
+    }
+}
+
+
 @implementation CDDepthProcessor
 
 + (instancetype)shared {
@@ -56,7 +84,7 @@
     UIImage *scaled = [self scaleImage:image toSize:size];
     CGImageRef cg = scaled.CGImage;
     if (!cg) {
-        if ([CDPreferences shared].debugLogging) NSLog(@"[CelosiaDepth] heuristic: scaled image has no CGImage");
+        if ([CDPreferences shared].debugLogging) CDPLog(@"heuristic: scaled image has no CGImage");
         return nil;
     }
 
@@ -97,7 +125,7 @@
 
     float coverage = total ? (float)opaque / (float)total : 0.0f;
     if ([CDPreferences shared].debugLogging) {
-        NSLog(@"[CelosiaDepth] heuristic diagnostic: image=%zux%zu target=%.0fx%.0f opaque=%zu total=%zu coverage=%.4f",
+        CDPLog(@"heuristic diagnostic: image=%zux%zu target=%.0fx%.0f opaque=%zu total=%zu coverage=%.4f",
               w, h, size.width, size.height, opaque, total, coverage);
     }
 
@@ -106,7 +134,7 @@
         CGContextRelease(ctx);
         free(buf);
         if ([CDPreferences shared].debugLogging) {
-            NSLog(@"[CelosiaDepth] heuristic rejected coverage=%.4f (accepted range 0.0200..0.4500)", coverage);
+            CDPLog(@"heuristic rejected coverage=%.4f (accepted range 0.0200..0.4500)", coverage);
         }
         return nil;
     }
@@ -126,7 +154,7 @@
     NSString *cacheKey = [NSString stringWithFormat:@"%@|%.0fx%.0f", info.identityKey, targetSize.width, targetSize.height];
     UIImage *cached = [[CDCacheManager shared] cachedForegroundForKey:cacheKey];
     if (cached) {
-        if ([CDPreferences shared].debugLogging) NSLog(@"[CelosiaDepth] foreground cache hit key=%@", cacheKey);
+        if ([CDPreferences shared].debugLogging) CDPLog(@"foreground cache hit key=%@", cacheKey);
         return cached;
     }
 
@@ -137,12 +165,12 @@
         UIImage *mask = [self loadBundledMaskNamed:info.matchedMaskName];
         if (mask) {
             result = [self applyMask:mask toImage:info.image size:targetSize];
-            if (prefs.debugLogging) NSLog(@"[CelosiaDepth] bundled mask %@ %@", info.matchedMaskName, result ? @"applied" : @"failed");
+            if (prefs.debugLogging) CDPLog(@"bundled mask %@ %@", info.matchedMaskName, result ? @"applied" : @"failed");
         } else if (prefs.debugLogging) {
-            NSLog(@"[CelosiaDepth] bundled mask %@ not found/readable", info.matchedMaskName);
+            CDPLog(@"bundled mask %@ not found/readable", info.matchedMaskName);
         }
     } else if (prefs.debugLogging) {
-        NSLog(@"[CelosiaDepth] no matched bundled mask; using heuristic");
+        CDPLog(@"no matched bundled mask; using heuristic");
     }
 
     if (!result) {
