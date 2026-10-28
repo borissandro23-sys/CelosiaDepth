@@ -31,7 +31,7 @@ static void CDLog(NSString *fmt, ...) {
     NSString *s = [[NSString alloc] initWithFormat:fmt arguments:args];
     va_end(args);
 
-    NSString *line = [NSString stringWithFormat:@"%@ [CelosiaDepth] %@\\n", [NSDate date], s];
+    NSString *line = [NSString stringWithFormat:@"%@ [CelosiaDepth] %@\n", [NSDate date], s];
     NSLog(@"[CelosiaDepth] %@", s);
 
     // Keep a small, user-readable diagnostic trail because the iOS unified-log
