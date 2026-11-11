@@ -2,7 +2,7 @@ name: Build CelosiaDepth (rootless)
 
 on:
   push:
-    branches: [ main, master ]
+    branches: [ main, master, fix/liquid-glass-depth ]
   pull_request:
   workflow_dispatch:
 
