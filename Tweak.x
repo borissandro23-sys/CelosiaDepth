@@ -34,12 +34,25 @@ static void CDLog(NSString *fmt, ...) {
 
 static UIView *CDFindClockHostInView(UIView *root) {
     if (!root) return nil;
+
+    // Return the actual clock view, not its superview. On legacy iOS 15,
+    // Liquid (Gl)ass uses host.superview as its render container.
     NSString *clsName = NSStringFromClass(root.class);
-    if ([clsName containsString:@"LockScreenDate"] || [clsName containsString:@"SBFLockScreenDateView"]) {
-        return root.superview ?: root;
-    }
+    if ([clsName isEqualToString:@"SBFLockScreenDateView"]) return root;
+
     for (UIView *sub in root.subviews) {
         UIView *found = CDFindClockHostInView(sub);
+        if (found) return found;
+    }
+    return nil;
+}
+
+static UIView *CDFindLegacyClockFallback(UIView *root) {
+    if (!root) return nil;
+    NSString *clsName = NSStringFromClass(root.class);
+    if ([clsName containsString:@"LockScreenDate"]) return root;
+    for (UIView *sub in root.subviews) {
+        UIView *found = CDFindLegacyClockFallback(sub);
         if (found) return found;
     }
     return nil;
@@ -48,6 +61,9 @@ static UIView *CDFindClockHostInView(UIView *root) {
 static UIView *CDLikelyLockContentView(void) {
     for (UIWindow *window in UIApplication.sharedApplication.windows) {
         UIView *found = CDFindClockHostInView(window);
+        if (found) return found;
+        // Fallback for iOS builds where the private clock class differs.
+        found = CDFindLegacyClockFallback(window);
         if (found) return found;
     }
     return nil;
@@ -60,29 +76,39 @@ static void CDRemoveOverlay(void) {
     }
 }
 
-static void CDEnsureOverlayAboveClock(UIView *clockRelated) {
-    if (!clockRelated) return;
-    UIView *parent = clockRelated.superview ?: clockRelated;
+static void CDEnsureOverlayAboveClock(UIView *clockView) {
+    if (!clockView) return;
+
+    // Match Liquid (Gl)ass's iOS 15 legacy render container: clockView.superview.
+    UIView *container = clockView.superview ?: clockView;
     if (!CDOverlay) {
-        CDOverlay = [[CDDepthOverlayView alloc] initWithFrame:parent.bounds];
+        CDOverlay = [[CDDepthOverlayView alloc] initWithFrame:container.bounds];
         CDOverlay.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
         CDOverlay.tag = 0xCE10CA;
     }
-    for (UIView *v in parent.subviews) {
-        if (v != CDOverlay && v.tag == 0xCE10CA) {
-            [v removeFromSuperview];
+
+    for (UIView *view in container.subviews) {
+        if (view != CDOverlay && view.tag == 0xCE10CA) [view removeFromSuperview];
+    }
+
+    // Liquid (Gl)ass keeps its clock glass as an LGLiveBackdropView in this
+    // container. Put the foreground immediately above that glass, rather than
+    // blindly raising a full-screen overlay above notification views.
+    UIView *glassView = nil;
+    for (UIView *view in container.subviews) {
+        if ([NSStringFromClass(view.class) isEqualToString:@"LGLiveBackdropView"]) {
+            glassView = view;
+            break;
         }
     }
-    if (CDOverlay.superview != parent) {
-        [CDOverlay removeFromSuperview];
-        NSUInteger idx = [parent.subviews indexOfObject:clockRelated];
-        if (idx != NSNotFound) {
-            [parent insertSubview:CDOverlay aboveSubview:clockRelated];
-        } else {
-            [parent addSubview:CDOverlay];
-        }
+
+    [CDOverlay removeFromSuperview];
+    if (glassView) {
+        [container insertSubview:CDOverlay aboveSubview:glassView];
+    } else {
+        [container insertSubview:CDOverlay aboveSubview:clockView];
     }
-    CDOverlay.frame = parent.bounds;
+    CDOverlay.frame = container.bounds;
 }
 
 static void CDRefreshDepthEffect(void) {
