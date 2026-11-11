@@ -36,4 +36,4 @@ include $(THEOS_MAKE_PATH)/tweak.mk
 include $(THEOS_MAKE_PATH)/bundle.mk
 
 after-install::
-    install.exec "sbreload || killall -9 SpringBoard"
+	install.exec "sbreload || killall -9 SpringBoard"
