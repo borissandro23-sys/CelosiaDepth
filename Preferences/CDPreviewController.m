@@ -50,8 +50,10 @@
     _clockLabel.textAlignment = NSTextAlignmentCenter;
     _clockLabel.shadowColor = [UIColor colorWithWhite:0 alpha:0.45];
     _clockLabel.shadowOffset = CGSizeMake(0, 1);
-    _clockLabel.userInteractionEnabled = YES;
+    _clockLabel.userInteractionEnabled = NO;
     [_preview addSubview:_clockLabel];
+    // Keep the clock fixed beneath the movable transparent person layer.
+    [_preview bringSubviewToFront:_foregroundView];
 
     _statusLabel = [[UILabel alloc] init];
     _statusLabel.translatesAutoresizingMaskIntoConstraints = NO;
@@ -89,8 +91,6 @@
         [_spinner.centerYAnchor constraintEqualToAnchor:_preview.centerYAnchor]
     ]];
 
-    UIPanGestureRecognizer *moveClock = [[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(moveClock:)];
-    [_clockLabel addGestureRecognizer:moveClock];
     UIPanGestureRecognizer *moveSubject = [[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(moveSubject:)];
     [_foregroundView addGestureRecognizer:moveSubject];
 }
@@ -163,7 +163,6 @@
     _wallpaperView.image = image;
     _foregroundView.image = nil;
     _foregroundView.transform = CGAffineTransformIdentity;
-    _clockLabel.transform = CGAffineTransformIdentity;
     _statusLabel.text = @"Analyzing Image…";
     [_spinner startAnimating];
 
@@ -174,19 +173,13 @@
             [self->_spinner stopAnimating];
             if (foreground) {
                 self->_foregroundView.image = foreground;
-                self->_statusLabel.text = @"Person detected. Drag the person and clock to preview the overlap.";
+                self->_statusLabel.text = @"Person detected. Drag only the person; the wallpaper and clock stay fixed.";
             } else {
                 self->_statusLabel.text = error ? @"Analysis failed. Try another photo." :
                     @"No person was detected. On iOS 15 this preview currently segments people, not arbitrary objects.";
             }
         });
     });
-}
-
-- (void)moveClock:(UIPanGestureRecognizer *)gesture {
-    CGPoint delta = [gesture translationInView:_preview];
-    _clockLabel.transform = CGAffineTransformTranslate(_clockLabel.transform, delta.x, delta.y);
-    [gesture setTranslation:CGPointZero inView:_preview];
 }
 
 - (void)moveSubject:(UIPanGestureRecognizer *)gesture {
