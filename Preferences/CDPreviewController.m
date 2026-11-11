@@ -38,7 +38,7 @@
 
     _foregroundView = [[UIImageView alloc] initWithFrame:CGRectZero];
     _foregroundView.translatesAutoresizingMaskIntoConstraints = NO;
-    _foregroundView.contentMode = UIViewContentModeScaleAspectFit;
+    _foregroundView.contentMode = UIViewContentModeScaleAspectFill;
     _foregroundView.userInteractionEnabled = YES;
     [_preview addSubview:_foregroundView];
 
@@ -118,14 +118,18 @@
 }
 
 - (UIImage *)personForegroundFromImage:(UIImage *)image error:(NSError **)error {
-    CGImageRef cgImage = image.CGImage;
+    UIGraphicsBeginImageContextWithOptions(image.size, NO, image.scale);
+    [image drawInRect:(CGRect){CGPointZero, image.size}];
+    UIImage *normalized = UIGraphicsGetImageFromCurrentImageContext();
+    UIGraphicsEndImageContext();
+    CGImageRef cgImage = normalized.CGImage;
     if (!cgImage) return nil;
 
     VNGeneratePersonSegmentationRequest *request = [[VNGeneratePersonSegmentationRequest alloc] init];
     request.qualityLevel = VNGeneratePersonSegmentationRequestQualityLevelAccurate;
     request.outputPixelFormat = kCVPixelFormatType_OneComponent8;
     VNImageRequestHandler *handler = [[VNImageRequestHandler alloc] initWithCGImage:cgImage
-        orientation:(CGImagePropertyOrientation)image.imageOrientation options:@{}];
+        orientation:kCGImagePropertyOrientationUp options:@{}];
     if (![handler performRequests:@[request] error:error]) return nil;
 
     CVPixelBufferRef maskBuffer = request.results.firstObject.pixelBuffer;
@@ -149,7 +153,7 @@
     CIContext *context = [CIContext contextWithOptions:nil];
     CGImageRef result = [context createCGImage:output fromRect:input.extent];
     if (!result) return nil;
-    UIImage *foreground = [UIImage imageWithCGImage:result scale:image.scale orientation:image.imageOrientation];
+    UIImage *foreground = [UIImage imageWithCGImage:result scale:normalized.scale orientation:UIImageOrientationUp];
     CGImageRelease(result);
     return foreground;
 }
