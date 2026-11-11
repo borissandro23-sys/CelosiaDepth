@@ -28,6 +28,7 @@ CelosiaDepthPrefs_FILES := \
 CelosiaDepthPrefs_FRAMEWORKS := UIKit Vision CoreImage CoreVideo ImageIO
 CelosiaDepthPrefs_PRIVATE_FRAMEWORKS := Preferences
 CelosiaDepthPrefs_RESOURCE_FILES := Resources/Root.plist
+CelosiaDepthPrefs_INFOPLIST := Preferences/Info.plist
 CelosiaDepthPrefs_INSTALL_PATH := /Library/PreferenceBundles
 CelosiaDepthPrefs_CFLAGS := -fobjc-arc
 
