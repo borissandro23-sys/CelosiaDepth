@@ -10,6 +10,7 @@ TWEAK_NAME := CelosiaDepth
 
 CelosiaDepth_FILES := \
     Tweak.x \
+    Sources/CDShareActivityProbe.xm \
     Sources/CDWallpaperDetector.m \
     Sources/CDDepthProcessor.m \
     Sources/CDDepthOverlayView.m \
