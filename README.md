@@ -2,7 +2,7 @@
 
 Jailbreak tweak that adds a **lock-screen depth-style overlay** on **iOS 15** (rootless / **Dopamine**), aimed at Celosia-like wallpapers and similar still images.
 
-> **Status:** scaffold for iPhone 6s · iOS 15.8.x · A9. Private SpringBoard selectors and wallpaper paths **must be verified on device** before relying on them in production.
+> **Status:** first Core ML integration pass for iPhone 6s · iOS 15.8.x · A9. The model is downloaded during CI and installed as a separate rootless resource. Private SpringBoard selectors and wallpaper paths **must still be verified on device**.
 
 ## Features
 
@@ -19,7 +19,7 @@ Jailbreak tweak that adds a **lock-screen depth-style overlay** on **iOS 15** (r
 
 - Not a full port of iOS 16+ system Depth Effect / Portrait wallpaper pipeline
 - Abstract wallpapers without a clear subject are **rejected** (no random blobs over the clock)
-- No continuous Core ML in SpringBoard (A9 / 2 GB RAM)
+- Segmentation runs only when the wallpaper is refreshed and is cached; it is not a live video pipeline\n- DeepLabV3 recognizes a fixed set of Pascal VOC classes, not every possible object\n- A9 performance and memory use still require real-device testing; model size does not guarantee speed
 - Class names such as `SBLockScreenManager`, `CSCoverSheetViewController`, `SBWallpaperController`, `SBFLockScreenDateView` are **common on iOS 14–15** but must be confirmed on **15.8.8**
 
 ## Requirements
@@ -63,7 +63,7 @@ CelosiaDepth/
 └── README.md
 ```
 
-## Adding Celosia masks
+## Core ML model\n\nThe build workflow downloads Apple's `DeepLabV3FP16.mlmodel` (about 4.3 MB) from Apple's model gallery into the rootless package at `/var/jb/Library/Application Support/CelosiaDepth/Models/`. At runtime the tweak compiles the model once, performs segmentation off the SpringBoard main thread, and caches the resulting foreground. The model uses semantic classes, so unrelated objects from the same class can be included together.\n\n## Adding Celosia masks
 
 1. Export a **grayscale / alpha mask** aligned to the wallpaper canvas (white = foreground).
 2. Place as `Resources/Masks/<id>.png`.
