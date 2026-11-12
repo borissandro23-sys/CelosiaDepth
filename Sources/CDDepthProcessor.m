@@ -1,6 +1,7 @@
 #import "CDDepthProcessor.h"
 #import "CDCacheManager.h"
 #import "CDPreferences.h"
+#import "CDCoreMLSegmenter.h"
 
 @implementation CDDepthProcessor
 
@@ -139,6 +140,25 @@
     return out;
 }
 
+- (void)requestForegroundImageForWallpaper:(CDWallpaperInfo *)info
+                                targetSize:(CGSize)targetSize
+                                completion:(void (^)(UIImage * _Nullable image))completion {
+    static dispatch_queue_t processingQueue;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        processingQueue = dispatch_queue_create("com.celosiadepth.image-processing", DISPATCH_QUEUE_SERIAL);
+    });
+
+    dispatch_async(processingQueue, ^{
+        @autoreleasepool {
+            UIImage *result = [self foregroundImageForWallpaper:info targetSize:targetSize];
+            dispatch_async(dispatch_get_main_queue(), ^{
+                if (completion) completion(result);
+            });
+        }
+    });
+}
+
 - (UIImage *)foregroundImageForWallpaper:(CDWallpaperInfo *)info targetSize:(CGSize)targetSize {
     if (!info.image || targetSize.width < 1 || targetSize.height < 1) return nil;
 
@@ -163,6 +183,11 @@
         } else if (prefs.debugLogging) {
             NSLog(@"[CelosiaDepth] mask file missing for name=%@", info.matchedMaskName);
         }
+    }
+
+    if (!result) {
+        result = [CDCoreMLSegmenter foregroundImageFromImage:info.image targetSize:targetSize];
+        if (result) via = @"DeepLabV3-CoreML";
     }
 
     if (!result) {
