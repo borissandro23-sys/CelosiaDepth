@@ -128,17 +128,35 @@ static void CDRefreshDepthEffect(void) {
         target = CGSizeMake(floor(target.width * scale), floor(target.height * scale));
     }
 
-    UIImage *fg = [[CDDepthProcessor shared] foregroundImageForWallpaper:info targetSize:target];
-    if (!fg) {
-        CDLog(@"no reliable foreground; clearing overlay");
-        [CDOverlay clearContent];
-        return;
-    }
+    NSString *requestedFingerprint = fp ?: info.identityKey;
+    [[CDDepthProcessor shared] requestForegroundImageForWallpaper:info
+                                                       targetSize:target
+                                                       completion:^(UIImage *fg) {
+        if (![CDPreferences shared].isEnabled) return;
 
-    [CDOverlay setForegroundImage:fg intensity:[CDPreferences shared].intensity];
-    CDLastFingerprint = fp;
-    CDLog(@"overlay updated key=%@ fgSize=%.0fx%.0f intensity=%.2f",
-          info.identityKey, fg.size.width, fg.size.height, [CDPreferences shared].intensity);
+        NSString *currentFingerprint = [[CDWallpaperDetector shared] currentWallpaperFingerprint];
+        if (requestedFingerprint.length && currentFingerprint.length &&
+            ![requestedFingerprint isEqualToString:currentFingerprint]) {
+            CDLog(@"discarding stale segmentation result");
+            return;
+        }
+
+        UIView *latestClockHost = CDLikelyLockContentView();
+        if (!latestClockHost) return;
+        CDEnsureOverlayAboveClock(latestClockHost);
+        if (!CDOverlay) return;
+
+        if (!fg) {
+            CDLog(@"no reliable foreground; clearing overlay");
+            [CDOverlay clearContent];
+            return;
+        }
+
+        [CDOverlay setForegroundImage:fg intensity:[CDPreferences shared].intensity];
+        CDLastFingerprint = requestedFingerprint;
+        CDLog(@"overlay updated key=%@ fgSize=%.0fx%.0f intensity=%.2f",
+              info.identityKey, fg.size.width, fg.size.height, [CDPreferences shared].intensity);
+    }];
 }
 
 static void CDScheduleRefresh(void) {
