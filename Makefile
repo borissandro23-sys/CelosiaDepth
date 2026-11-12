@@ -12,12 +12,13 @@ CelosiaDepth_FILES := \
 	Tweak.x \
 	Sources/CDWallpaperDetector.m \
 	Sources/CDDepthProcessor.m \
+	Sources/CDCoreMLSegmenter.m \
 	Sources/CDDepthOverlayView.m \
 	Sources/CDCacheManager.m \
 	Sources/CDPreferences.m
 
 CelosiaDepth_CFLAGS := -fobjc-arc -Wno-unused-variable -Wno-deprecated-declarations
-CelosiaDepth_FRAMEWORKS := UIKit CoreGraphics CoreImage QuartzCore Foundation
+CelosiaDepth_FRAMEWORKS := UIKit CoreGraphics CoreImage QuartzCore Foundation CoreML Vision
 CelosiaDepth_PRIVATE_FRAMEWORKS := SpringBoardFoundation
 CelosiaDepth_LIBRARIES := substrate
 
