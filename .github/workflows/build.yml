@@ -13,39 +13,41 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Download Apple DeepLabV3 FP16 model
+        run: |
+          set -euo pipefail
+          MODEL_DIR="layout/Library/Application Support/CelosiaDepth/Models"
+          mkdir -p "$MODEL_DIR"
+          curl --fail --location --retry 3 --retry-delay 2 \
+            "https://ml-assets.apple.com/coreml/models/Image/ImageSegmentation/DeepLabV3/DeepLabV3FP16.mlmodel" \
+            --output "$MODEL_DIR/DeepLabV3FP16.mlmodel"
+          test -s "$MODEL_DIR/DeepLabV3FP16.mlmodel"
+          echo "Downloaded model: $(du -h "$MODEL_DIR/DeepLabV3FP16.mlmodel")"
 
       - name: Install Theos and iOS SDK
         run: |
           set -e
           export THEOS="$HOME/theos"
-
           git clone --recursive https://github.com/theos/theos.git "$THEOS"
-
           git clone --depth 1 --filter=blob:none --sparse \
             https://github.com/theos/sdks.git "$HOME/theos-sdks"
-
           git -C "$HOME/theos-sdks" sparse-checkout set iPhoneOS15.6.sdk
-
           mkdir -p "$THEOS/sdks"
           cp -R "$HOME/theos-sdks/iPhoneOS15.6.sdk" "$THEOS/sdks/"
-
           echo "THEOS=$THEOS" >> "$GITHUB_ENV"
-          
+
       - name: Install ldid
         run: |
           brew install ldid
           command -v ldid
-
-
 
       - name: Build package (rootless)
         run: |
           set -e
           export THEOS="$HOME/theos"
           export THEOS_PACKAGE_SCHEME=rootless
-          # Non-fatal if SDK 15.5 missing — fall back to available SDK
           make clean || true
-          make package FINALPACKAGE=1 || make package
+          make package FINALPACKAGE=1
 
       - name: Locate deb
         id: deb
